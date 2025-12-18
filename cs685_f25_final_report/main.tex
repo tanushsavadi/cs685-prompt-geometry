@@ -8,6 +8,14 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{multirow}
+% \usepackage{hyperref}
+
+% \makeatletter
+% \AtBeginDocument{%
+%   \def\UrlFont{\small\ttfamily}  % or \footnotesize, \scriptsize
+% }
+% \makeatother
+
 
 \title{Using Embeddings' Geometric Similarity for In-Context Learning}
 
@@ -22,7 +30,7 @@
 \maketitle
 
 \begin{abstract}
-Recent work demonstrates that large language model embeddings share geometric regularities, including locally low-dimensional structure correlated with semantic coherence. We investigate whether prompt effectiveness is partly explained by the geometry of token embeddings. Specifically, we evaluate the correlation between geometric metrics---local intrinsic dimension (ID) and Local Linear Embedding (LLE) reconstruction error---and model performance on the GSM8K mathematical reasoning benchmark. Using two models (TinyLlama-1.1B and Gemma-3-1b-it) across 11 prompt templates, we find that TinyLlama shows a moderate negative correlation between intrinsic dimension and accuracy (Spearman $\rho = -0.54$, $p = 0.085$), suggesting prompts with lower mean intrinsic dimension tend to achieve higher accuracy. However, Gemma-3-1b-it shows no significant correlation, indicating the geometry-performance relationship may be model-dependent. Our results provide preliminary evidence that embedding geometry offers a signal for predicting prompt effectiveness, while highlighting the need for cross-model validation.
+Recent work demonstrates that large language model embeddings share geometric regularities, including locally low-dimensional structure correlated with semantic coherence. We investigate whether prompt effectiveness is partly explained by the geometry of token embeddings. Specifically, we evaluate the correlation between geometric metrics-- intrinsic dimension (ID) and Local Linear Embedding (LLE) reconstruction error---and model performance on the GSM8K mathematical reasoning benchmark. Using two models (TinyLlama-1.1B and Gemma-3-1B-it) across 11 prompt templates, we find that TinyLlama shows a moderate negative correlation between intrinsic dimension and accuracy (Spearman $\rho = -0.54$, $p = 0.085$), suggesting that prompts with lower mean intrinsic dimension tend to achieve higher accuracy. However, Gemma-3-1b-it shows no significant correlation, indicating the geometry-performance relationship may be dependent on the model or mode of training. Our results suggest that embedding geometry offers a signal for predicting prompt effectiveness, and highlights the need for further testing across model and prompt contexts. 
 \end{abstract}
 
 \section{Introduction}
@@ -31,7 +39,7 @@ Prompt engineering has emerged as an indispensable technique for extending the c
 
 Recent work on representation geometry suggests a potential answer. The Platonic Representation Hypothesis~\citep{huh2024platonic} argues that AI systems are converging toward shared internal representations. Building on this, \citet{lee2025geometry} demonstrated that token embeddings across LLMs share ``global'' similarities (correlated pairwise token orientations within model families) and ``local'' geometric structure (shared LLE neighborhoods, low intrinsic dimensions for semantically coherent regions). Crucially, they found that not all parts of embedding space are equal: some neighborhoods are more organized than others.
 
-This raises a natural question: \textbf{Do prompts that rely on tokens in ``well-organized'' regions of embedding space produce more reliable model outputs?} If prompts with geometrically stable token neighborhoods yield better performance, this would provide a lightweight, query-free method for predicting prompt effectiveness.
+This raises a natural question: \textbf{Do prompts that rely on tokens in ``good'' regions of embedding space produce more reliable model outputs?} If prompts with well-organized, geometrically stable token neighborhoods yield better performance, this would provide a lightweight, query-free method for predicting prompt effectiveness.
 
 We test this hypothesis by computing two geometric metrics---local intrinsic dimension (ID) via PCA and LLE reconstruction error---for prompt tokens, then correlating these metrics with accuracy on the GSM8K mathematical reasoning benchmark~\citep{cobbe2021gsm8k}. Our key findings are:
 
@@ -48,7 +56,7 @@ In our proposal, we outlined the following goals:
 \begin{itemize}
     \item \textbf{Compute LLE \& ID metrics} on token embeddings: \textit{Completed}. We successfully implemented intrinsic dimension computation via PCA and LLE reconstruction error using FAISS for efficient kNN search.
     
-    \item \textbf{Evaluate on GSM8K}: \textit{Completed}. We evaluated TinyLlama on 300 samples and Gemma on 150 samples, both using 11 prompt templates.
+    \item \textbf{Evaluate on GSM8K}: \textit{Completed}. We evaluated TinyLlama on 300 samples and Gemma on 150 samples (randomly sampled), both using 11 prompt templates.
     
     \item \textbf{Evaluate on TruthfulQA}: \textit{Not completed}. Due to time constraints and the computational cost of running full evaluations, we focused on thorough analysis of GSM8K only.
     
@@ -56,14 +64,14 @@ In our proposal, we outlined the following goals:
     
     \item \textbf{Cross-model comparison}: \textit{Completed}. We compared TinyLlama-1.1B-Chat and Gemma-3-1b-it, representing two different model families.
     
-    \item \textbf{Word-swap experiments}: \textit{Not completed}. Due to time constraints, we focused on the core correlation analysis rather than the intervention experiments.
+    \item \textbf{Word-swap experiments}: \textit{Partially completed}. Due to time constraints, we focused on the core correlation analysis rather than the intervention experiments. We made a note of the word embeddings compared v/s instrinsic dimension (ID).
 \end{itemize}
 
-\textbf{Changes from proposal:} We used TinyLlama-1.1B-Chat as our primary baseline model instead of Llama-3.2 due to accessibility constraints (TinyLlama requires no HuggingFace authentication). We also deferred the TruthfulQA, XSum, and RealToxicityPrompts datasets to prioritize thorough analysis on GSM8K with cross-model validation.
+\textbf{Changes from proposal:} We used TinyLlama-1.1B-Chat as our primary baseline model instead of Llama-3.2 due to accessibility constraints (TinyLlama requires no HuggingFace authentication permissions). We also deferred the TruthfulQA, XSum, and RealToxicityPrompts datasets to prioritize thorough analysis on GSM8K with cross-model validation.
 
 \section{Related Work}
 
-Our work sits at the intersection of representation geometry and prompt engineering. We survey both areas and identify the gap our study addresses.
+This work sits at the intersection of representation geometry and prompt engineering. We provide a brief survey of both areas and identify the gap our study addresses.
 
 \paragraph{Geometry of LM Representations.}
 The Platonic Representation Hypothesis~\citep{huh2024platonic} proposes that neural network representations are converging across architectures, suggesting deep structural similarities in how models encode information. \citet{lee2025geometry} provided empirical evidence for this in the context of language models, demonstrating that token embeddings exhibit (1) high within-family cross-model correlation of pairwise token orientations, (2) shared locally-linear neighborhoods via LLE analysis, and (3) lower intrinsic dimensions for tokens that cluster semantically. Their work establishes that some regions of embedding space are more ``organized'' than others---a key insight we leverage for prompt analysis.
@@ -84,14 +92,14 @@ Prior work documents geometric structure in LM embeddings and shows that prompt 
 
 \subsection{GSM8K}
 
-GSM8K~\citep{cobbe2021gsm8k} is a benchmark of 8,792 grade-school math word problems requiring multi-step arithmetic reasoning. We use the test split containing 1,319 problems. Each problem has a question and a reference answer in the format ``[reasoning]####[final\_number]''.
+\noindent GSM8K~\citep{cobbe2021gsm8k} is a benchmark of 8,792 grade-school math word problems requiring multi-step arithmetic reasoning. We use the test split containing 1,319 problems. Each problem has a question and a reference answer in the format ``[reasoning]\#\#\#\#[final\_number]''.\\
 
-\textbf{Why GSM8K?} Mathematical reasoning provides a clean evaluation setting: answers are unambiguous numbers, allowing automatic evaluation. The task is challenging for small models, creating variance in performance across prompt strategies.
+\textbf{Why GSM8K?} Mathematical reasoning provides a clean evaluation setting: answers are unambiguous numbers, allowing automatic evaluation. The task is challenging for small models, creating variance in performance across prompt strategies.\\
 
 \textbf{Statistics:}
 \begin{itemize}
     \item Test set: 1,319 questions
-    \item Samples used: 300 (TinyLlama), 150 (Gemma)
+    \item Samples: 300 (TinyLlama), 150 (Gemma)
     \item Average question length: 50-100 tokens
     \item Answer format: integers and decimals
 \end{itemize}
@@ -100,12 +108,15 @@ GSM8K~\citep{cobbe2021gsm8k} is a benchmark of 8,792 grade-school math word prob
 \begin{quote}
 \textit{Question:} Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for \$2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?
 
-\textit{Answer:} She sells 16 - 3 - 4 = 9 eggs per day. She makes 9 * 2 = \$18 per day. #### 18
+\textit{Answer:} 
+She sells 16 - 3 - 4 = 9 eggs 
+per day. She makes 9 * 2 = \$18 
+per day. \#\#\#\# 18
 \end{quote}
 
 \subsection{Data Preprocessing}
 
-We extract the gold answer by splitting on ``####'' and taking the last element. For model predictions, we extract the last number appearing in the final three non-empty lines of the response. Numbers with commas (e.g., ``1,000'') are normalized by removing commas. Predictions are marked correct only if they exactly match the gold answer as a string.
+We extract the gold answer by splitting on ``\#\#\#\#'' and taking the last element. For model predictions, we extract the last number appearing in the final three non-empty lines of the response. Numbers with commas (e.g., ``1,000'') are normalized by removing commas. Predictions are marked correct only if they exactly match the gold answer as a string.
 
 \section{Baselines}
 
@@ -127,7 +138,7 @@ We compare results between TinyLlama-1.1B-Chat and Gemma-3-1b-it to test whether
 Following \citet{lee2025geometry}, we compute two metrics for each token in the vocabulary:
 
 \paragraph{Local Intrinsic Dimension (ID).}
-For each token $t$, we find its $k=20$ nearest neighbors in embedding space (using cosine similarity via FAISS). We then compute PCA on the centered neighborhood and count the number of components needed to explain 95\% of variance. Lower ID indicates the neighborhood lies on a lower-dimensional manifold---more ``organized'' structure.
+For each token $t$, we find its $k=20$ nearest neighbors in embedding space (using cosine similarity via FAISS ~\citep{faiss} for faster retrieval). We then compute PCA on the centered neighborhood and count the number of components needed to explain 95\% of variance. Lower ID indicates the neighborhood lies on a lower-dimensional manifold and possesses a more ``organized'' structure.
 
 \paragraph{LLE Reconstruction Error.}
 Local Linear Embedding~\citep{roweis2000lle} measures how well a point can be reconstructed as a linear combination of its neighbors. For token $t$ with embedding $\mathbf{x}$ and neighbors $\mathbf{X}_N$:
@@ -287,6 +298,7 @@ Table~\ref{tab:correlations} presents correlations between geometry and accuracy
 
 \begin{table}[h]
 \centering
+\setlength{\tabcolsep}{2pt} % default is ~6pt
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Metric} & \multicolumn{2}{c}{\textbf{TinyLlama}} & \multicolumn{2}{c}{\textbf{Gemma}} \\
@@ -329,6 +341,7 @@ We analyzed the errors to understand failure modes across prompt types.
 
 \begin{table}[h]
 \centering
+\setlength{\tabcolsep}{2pt} % default is ~6pt
 \begin{tabular}{lcccc}
 \toprule
 \textbf{Template Type} & \multicolumn{2}{c}{\textbf{TinyLlama}} & \multicolumn{2}{c}{\textbf{Gemma}} \\
@@ -394,7 +407,7 @@ These differences highlight the importance of cross-model validation and suggest
 \subsection{Future Work}
 
 \begin{itemize}
-    \item \textbf{Word-swap experiments:} Replace high-ID tokens with low-ID synonyms to test causal effects.
+    \item \textbf{Word-swap experiments:} Replace high-ID tokens with low-ID synonyms to test causal effects. Preliminary results in the appendix (\ref{fig:word}) suggest that the ID of single-tokens are very close together, motivating the need for other methods to investigate changing a single word in the prompt.
     \item \textbf{More models:} Test on Llama-3, Mistral, and larger models.
     \item \textbf{Additional datasets:} TruthfulQA, MMLU, and generation tasks.
     \item \textbf{More prompts:} Expand to 20+ templates for better statistical power.
@@ -404,7 +417,7 @@ These differences highlight the importance of cross-model validation and suggest
 \section{Contributions}
 
 \begin{itemize}
-    \item \textbf{Om Mehta:} Literature review, methodology design, correlation analysis, report writing.
+    \item \textbf{Om Mehta:} Literature review, methodology design, prototyping, correlation analysis, report writing.
     \item \textbf{Tanush Savadi:} Implementation, experiments, data analysis, visualization, report writing.
 \end{itemize}
 
@@ -420,14 +433,17 @@ We investigated whether the geometry of prompt token embeddings predicts LLM per
 
 Our findings provide preliminary evidence that embedding geometry may offer a lightweight signal for prompt selection, aligning with prior work showing that not all regions of embedding space are equal~\citep{lee2025geometry}. However, the model-dependent nature of our results underscores the need for further cross-model validation before drawing broader conclusions.
 
-\paragraph{Code Availability.}
+\section{Code Availability.}
 All code and data for this project are available at: \url{https://github.com/tanushsavadi/cs685-prompt-geometry}
 
 \noindent The main experiment code is in the following Jupyter notebooks (designed for Google Colab):
 \begin{itemize}
-    \item \texttt{CS685\_Final\_Project\_Colab\_Baseline.ipynb} -- TinyLlama experiments (baseline)
-    \item \texttt{CS685\_Final\_Project\_Colab\_googleGemma\_final.ipynb} -- Gemma experiments (final)
+    \item \href{https://github.com/tanushsavadi/cs685-prompt-geometry/blob/main/CS685_Final_Project_Colab_Baseline.ipynb}{\texttt{CS685\_Project\_Baseline.ipynb}} --- TinyLlama-1.1B baseline experiments. Evaluates 11 prompt templates on 300 GSM8K samples, computing intrinsic dimension and LLE metrics for correlation analysis.
+    
+    \item \href{https://github.com/tanushsavadi/cs685-prompt-geometry/blob/main/CS685_Final_Project_Colab_googleGemma_final.ipynb}{\texttt{CS685\_Project\_Final.ipynb}} --- Gemma-3-1b-it final experiments. Replicates the baseline analysis on 150 GSM8K samples to validate cross-model generalization of geometry-accuracy correlations.
 \end{itemize}
+
+
 
 \section{AI Disclosure}
 
@@ -457,5 +473,14 @@ All code and data for this project are available at: \url{https://github.com/tan
 \bibliographystyle{apalike}
 \footnotesize
 \bibliography{yourbib}
+
+\subsection{Appendix}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\columnwidth]{cs685_f25_final_report/figs/ID_words.png}
+    \caption{Word distribution for ID analysis.}
+    \label{fig:word}
+\end{figure}
 
 \end{document}
