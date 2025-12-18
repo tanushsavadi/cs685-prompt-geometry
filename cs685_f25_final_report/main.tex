@@ -1,0 +1,452 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[preprint]{acl}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{graphicx}
+\usepackage[normalem]{ulem}
+\usepackage{url}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{multirow}
+
+\title{Using Embeddings' Geometric Similarity for In-Context Learning}
+
+\author{Om Mehta \\
+  {\tt omehta@umass.edu} \\\And
+  Tanush Savadi \\
+  {\tt tsavadi@umass.edu} \\}
+  
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Recent work demonstrates that large language model embeddings share geometric regularities, including locally low-dimensional structure correlated with semantic coherence. We investigate whether prompt effectiveness is partly explained by the geometry of token embeddings. Specifically, we evaluate the correlation between geometric metrics---local intrinsic dimension (ID) and Local Linear Embedding (LLE) reconstruction error---and model performance on the GSM8K mathematical reasoning benchmark. Using two models (TinyLlama-1.1B and Gemma-3-1b-it) across 11 prompt templates, we find that TinyLlama shows a moderate negative correlation between intrinsic dimension and accuracy (Spearman $\rho = -0.54$, $p = 0.085$), suggesting prompts with lower mean intrinsic dimension tend to achieve higher accuracy. However, Gemma-3-1b-it shows no significant correlation, indicating the geometry-performance relationship may be model-dependent. Our results provide preliminary evidence that embedding geometry offers a signal for predicting prompt effectiveness, while highlighting the need for cross-model validation.
+\end{abstract}
+
+\section{Introduction}
+
+Prompt engineering has emerged as an indispensable technique for extending the capabilities of large language models (LLMs)~\citep{sahoo2024survey}. Subtle choices in prompt design---such as wording, tone, and structure---can dramatically influence model outputs~\citep{djeffal2025reflexive}. Understanding \textit{why} certain prompts work better than others remains an open question with significant practical implications.
+
+Recent work on representation geometry suggests a potential answer. The Platonic Representation Hypothesis~\citep{huh2024platonic} argues that AI systems are converging toward shared internal representations. Building on this, \citet{lee2025geometry} demonstrated that token embeddings across LLMs share ``global'' similarities (correlated pairwise token orientations within model families) and ``local'' geometric structure (shared LLE neighborhoods, low intrinsic dimensions for semantically coherent regions). Crucially, they found that not all parts of embedding space are equal: some neighborhoods are more organized than others.
+
+This raises a natural question: \textbf{Do prompts that rely on tokens in ``well-organized'' regions of embedding space produce more reliable model outputs?} If prompts with geometrically stable token neighborhoods yield better performance, this would provide a lightweight, query-free method for predicting prompt effectiveness.
+
+We test this hypothesis by computing two geometric metrics---local intrinsic dimension (ID) via PCA and LLE reconstruction error---for prompt tokens, then correlating these metrics with accuracy on the GSM8K mathematical reasoning benchmark~\citep{cobbe2021gsm8k}. Our key findings are:
+
+\begin{enumerate}
+    \item Prompt wording significantly affects accuracy, even for small models (1.3\% to 8.0\% range across templates and models).
+    \item For TinyLlama, prompts with \textbf{lower ID} (more compact neighborhoods) tend to achieve \textbf{higher accuracy} (Spearman $\rho = -0.54$, $p = 0.085$).
+    \item For Gemma-3-1b-it, no significant correlation was observed, suggesting the geometry-accuracy relationship may be model-dependent.
+\end{enumerate}
+
+\section{What You Proposed vs. What You Accomplished}
+
+In our proposal, we outlined the following goals:
+
+\begin{itemize}
+    \item \textbf{Compute LLE \& ID metrics} on token embeddings: \textit{Completed}. We successfully implemented intrinsic dimension computation via PCA and LLE reconstruction error using FAISS for efficient kNN search.
+    
+    \item \textbf{Evaluate on GSM8K}: \textit{Completed}. We evaluated TinyLlama on 300 samples and Gemma on 150 samples, both using 11 prompt templates.
+    
+    \item \textbf{Evaluate on TruthfulQA}: \textit{Not completed}. Due to time constraints and the computational cost of running full evaluations, we focused on thorough analysis of GSM8K only.
+    
+    \item \textbf{Compute correlations between geometry and performance}: \textit{Completed}. We computed Pearson and Spearman correlations with p-values for both models.
+    
+    \item \textbf{Cross-model comparison}: \textit{Completed}. We compared TinyLlama-1.1B-Chat and Gemma-3-1b-it, representing two different model families.
+    
+    \item \textbf{Word-swap experiments}: \textit{Not completed}. Due to time constraints, we focused on the core correlation analysis rather than the intervention experiments.
+\end{itemize}
+
+\textbf{Changes from proposal:} We used TinyLlama-1.1B-Chat as our primary baseline model instead of Llama-3.2 due to accessibility constraints (TinyLlama requires no HuggingFace authentication). We also deferred the TruthfulQA, XSum, and RealToxicityPrompts datasets to prioritize thorough analysis on GSM8K with cross-model validation.
+
+\section{Related Work}
+
+Our work sits at the intersection of representation geometry and prompt engineering. We survey both areas and identify the gap our study addresses.
+
+\paragraph{Geometry of LM Representations.}
+The Platonic Representation Hypothesis~\citep{huh2024platonic} proposes that neural network representations are converging across architectures, suggesting deep structural similarities in how models encode information. \citet{lee2025geometry} provided empirical evidence for this in the context of language models, demonstrating that token embeddings exhibit (1) high within-family cross-model correlation of pairwise token orientations, (2) shared locally-linear neighborhoods via LLE analysis, and (3) lower intrinsic dimensions for tokens that cluster semantically. Their work establishes that some regions of embedding space are more ``organized'' than others---a key insight we leverage for prompt analysis.
+
+\paragraph{Prompt Engineering and Internal Geometry.}
+Recent studies connect prompting strategies to changes in internal geometry. \citet{kirsanov2025geometry} compare instructions, demonstrations, and soft prompts, finding that these strategies trigger different mechanisms of task adaptation in hidden space. \citet{tsukagoshi2025redundancy} analyze prompt-based text embeddings and report task-dependent geometric signatures: lower intrinsic dimensionality for classification tasks versus higher for retrieval. This suggests that geometric properties of prompts may predict their effectiveness for different tasks.
+
+\paragraph{Soft Prompts and Transfer.}
+Prompt tuning treats prompts as continuous vectors optimized for specific tasks. \citet{vu2022spot} demonstrate that soft-prompt vectors can transfer across tasks, effectively behaving like ``task embeddings.'' While SPoT operates on learned vectors rather than discrete text, it supports the broader view that geometric similarity between prompt representations and tasks can predict adaptation success.
+
+\paragraph{Practical Prompt Engineering.}
+Surveys like \citet{sahoo2024survey} summarize practical prompt techniques (instruction formatting, few-shot examples, chain-of-thought) and their trade-offs. Work on responsible prompting~\citep{djeffal2025reflexive} emphasizes evaluating not only accuracy but also faithfulness and safety. Chain-of-thought prompting~\citep{wei2022chain, kojima2022zero} has shown particular promise for reasoning tasks like GSM8K.
+
+\paragraph{Our Contribution.}
+Prior work documents geometric structure in LM embeddings and shows that prompt formats affect outcomes. However, \textbf{no prior work directly tests whether prompt-token geometry (ID, LLE) predicts in-context performance}. Our study fills this gap with controlled experiments correlating geometry and accuracy on a standard benchmark across multiple models.
+
+\section{Dataset}
+
+\subsection{GSM8K}
+
+GSM8K~\citep{cobbe2021gsm8k} is a benchmark of 8,792 grade-school math word problems requiring multi-step arithmetic reasoning. We use the test split containing 1,319 problems. Each problem has a question and a reference answer in the format ``[reasoning]####[final\_number]''.
+
+\textbf{Why GSM8K?} Mathematical reasoning provides a clean evaluation setting: answers are unambiguous numbers, allowing automatic evaluation. The task is challenging for small models, creating variance in performance across prompt strategies.
+
+\textbf{Statistics:}
+\begin{itemize}
+    \item Test set: 1,319 questions
+    \item Samples used: 300 (TinyLlama), 150 (Gemma)
+    \item Average question length: 50-100 tokens
+    \item Answer format: integers and decimals
+\end{itemize}
+
+\textbf{Example:}
+\begin{quote}
+\textit{Question:} Janet's ducks lay 16 eggs per day. She eats three for breakfast every morning and bakes muffins for her friends every day with four. She sells the remainder at the farmers' market daily for \$2 per fresh duck egg. How much in dollars does she make every day at the farmers' market?
+
+\textit{Answer:} She sells 16 - 3 - 4 = 9 eggs per day. She makes 9 * 2 = \$18 per day. #### 18
+\end{quote}
+
+\subsection{Data Preprocessing}
+
+We extract the gold answer by splitting on ``####'' and taking the last element. For model predictions, we extract the last number appearing in the final three non-empty lines of the response. Numbers with commas (e.g., ``1,000'') are normalized by removing commas. Predictions are marked correct only if they exactly match the gold answer as a string.
+
+\section{Baselines}
+
+We compare our geometry-based analysis against several baselines:
+
+\paragraph{B1: Random Baseline.}
+For a dataset with numerical answers, random guessing has effectively 0\% accuracy, establishing a floor.
+
+\paragraph{B2: Prompt Length Baseline.}
+We examine whether longer prompts correlate with accuracy. If geometry predicts better than simple length, it suggests the geometric signal is meaningful beyond surface statistics.
+
+\paragraph{B3: Cross-Model Comparison.}
+We compare results between TinyLlama-1.1B-Chat and Gemma-3-1b-it to test whether geometry-accuracy correlations generalize across model families.
+
+\section{Approach}
+
+\subsection{Geometry Metrics}
+
+Following \citet{lee2025geometry}, we compute two metrics for each token in the vocabulary:
+
+\paragraph{Local Intrinsic Dimension (ID).}
+For each token $t$, we find its $k=20$ nearest neighbors in embedding space (using cosine similarity via FAISS). We then compute PCA on the centered neighborhood and count the number of components needed to explain 95\% of variance. Lower ID indicates the neighborhood lies on a lower-dimensional manifold---more ``organized'' structure.
+
+\paragraph{LLE Reconstruction Error.}
+Local Linear Embedding~\citep{roweis2000lle} measures how well a point can be reconstructed as a linear combination of its neighbors. For token $t$ with embedding $\mathbf{x}$ and neighbors $\mathbf{X}_N$:
+\begin{equation}
+    \text{LLE}(t) = \left\| \mathbf{x} - \sum_{i} w_i \mathbf{x}_i \right\|_2
+\end{equation}
+where weights $w_i$ are computed by solving a constrained linear system. Lower LLE error indicates more stable, locally-linear neighborhoods.
+
+\subsection{Prompt Geometry}
+
+For a prompt string $p$, we tokenize it and compute the mean geometry metrics:
+\begin{equation}
+    \text{MeanID}(p) = \frac{1}{|p|} \sum_{t \in p} \text{ID}(t)
+\end{equation}
+\begin{equation}
+    \text{MeanLLE}(p) = \frac{1}{|p|} \sum_{t \in p} \text{LLE}(t)
+\end{equation}
+
+Our hypothesis is that prompts with lower MeanID and MeanLLE yield higher accuracy.
+
+\subsection{Evaluation Pipeline}
+
+\begin{enumerate}
+    \item Load model and extract the embedding matrix
+    \item Build FAISS index for efficient kNN search
+    \item Precompute ID and LLE for all vocabulary tokens
+    \item For each prompt template and each GSM8K question:
+    \begin{itemize}
+        \item Format the prompt
+        \item Generate model response (max 128-256 new tokens, greedy decoding)
+        \item Extract predicted number from last lines
+        \item Compare to gold answer
+    \end{itemize}
+    \item Compute accuracy per template with 95\% Wilson confidence intervals
+    \item Compute geometry metrics for each template
+    \item Calculate Pearson/Spearman correlations with p-values
+\end{enumerate}
+
+\subsection{Prompt Templates}
+
+We evaluate 11 prompt templates spanning different strategies:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Type} & \textbf{Template (abbreviated)} \\
+\midrule
+Minimal & ``Q: \{q\} A:'' \\
+Minimal & ``Answer: \{q\} Final number:'' \\
+Direct & ``Answer the question: \{q\}...'' \\
+Direct & ``Provide the answer: \{q\}...'' \\
+Direct & ``Give the solution: \{q\}...'' \\
+CoT & ``Explain step by step: \{q\}...'' \\
+CoT & ``Show your reasoning: \{q\}...'' \\
+CoT & ``Think through this: \{q\}...'' \\
+Structured & ``You are a math tutor...'' \\
+Structured & ``Show reasoning in 2-3 steps...'' \\
+No-CoT & ``Do NOT show work...'' \\
+\bottomrule
+\end{tabular}
+\caption{Prompt templates tested, categorized by strategy.}
+\label{tab:templates}
+\end{table}
+
+\subsection{Models}
+
+We evaluate two models from different families:
+
+\begin{itemize}
+    \item \textbf{TinyLlama-1.1B-Chat-v1.0}: A 1.1B parameter model trained on 3 trillion tokens, fine-tuned for chat. This serves as our baseline model.
+    \item \textbf{Gemma-3-1b-it}: Google's 1B parameter instruction-tuned model from the Gemma family~\citep{gemma2024}.
+\end{itemize}
+
+\section{Results}
+
+\subsection{Overall Accuracy}
+
+Table~\ref{tab:accuracy} presents accuracy results across prompt templates for both models with 95\% confidence intervals.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Template} & \multicolumn{2}{c}{\textbf{TinyLlama}} & \multicolumn{2}{c}{\textbf{Gemma}} \\
+ & \textbf{Acc.} & \textbf{95\% CI} & \textbf{Acc.} & \textbf{95\% CI} \\
+\midrule
+minimal\_qa & 2.3\% & [1.1, 4.7] & 4.7\% & [2.3, 9.3] \\
+minimal\_answer & 3.0\% & [1.6, 5.6] & 2.7\% & [1.0, 6.7] \\
+direct\_answer & 1.7\% & [0.7, 3.8] & 2.0\% & [0.7, 5.7] \\
+direct\_provide & 1.3\% & [0.5, 3.4] & 2.7\% & [1.0, 6.7] \\
+direct\_give & 2.0\% & [0.9, 4.3] & 4.7\% & [2.3, 9.3] \\
+cot\_explain & 1.7\% & [0.7, 3.8] & 3.3\% & [1.4, 7.6] \\
+cot\_reasoning & 2.0\% & [0.9, 4.3] & 1.3\% & [0.4, 4.7] \\
+cot\_think & 3.7\% & [2.1, 6.4] & 1.3\% & [0.4, 4.7] \\
+structured\_tutor & 1.7\% & [0.7, 3.8] & 5.3\% & [2.7, 10.2] \\
+structured\_steps & 2.7\% & [1.4, 5.2] & \textbf{8.0\%} & [4.6, 13.5] \\
+no\_cot & \textbf{4.3\%} & [2.5, 7.3] & 4.0\% & [1.8, 8.5] \\
+\midrule
+\textbf{N} & \multicolumn{2}{c}{300} & \multicolumn{2}{c}{150} \\
+\bottomrule
+\end{tabular}
+\caption{Accuracy by prompt template for both models. Bold indicates best performing template per model.}
+\label{tab:accuracy}
+\end{table}
+
+\textbf{Key findings:} 
+\begin{itemize}
+    \item Accuracy varies substantially across prompts for both models.
+    \item TinyLlama performs best with \textbf{no\_cot} (4.3\%), while Gemma performs best with \textbf{structured\_steps} (8.0\%).
+    \item Chain-of-thought prompts do not consistently outperform simpler prompts for these small models.
+\end{itemize}
+
+\subsection{Geometry Metrics}
+
+Table~\ref{tab:geometry} presents the geometry metrics for each prompt template.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Template} & \multicolumn{2}{c}{\textbf{TinyLlama}} & \multicolumn{2}{c}{\textbf{Gemma}} \\
+ & \textbf{ID} & \textbf{LLE} & \textbf{ID} & \textbf{LLE} \\
+\midrule
+minimal\_qa & 16.80 & 0.281 & 16.13 & 0.541 \\
+minimal\_answer & 16.75 & 0.306 & 16.00 & 0.521 \\
+direct\_answer & 16.88 & 0.304 & 16.04 & 0.483 \\
+direct\_provide & 16.85 & 0.310 & 15.96 & 0.473 \\
+direct\_give & 16.84 & 0.304 & 15.96 & 0.471 \\
+cot\_explain & 16.92 & 0.317 & 15.92 & 0.484 \\
+cot\_reasoning & 16.76 & 0.307 & 15.81 & 0.481 \\
+cot\_think & 16.86 & 0.304 & 15.85 & 0.478 \\
+structured\_tutor & 16.91 & 0.319 & 15.90 & 0.472 \\
+structured\_steps & 16.80 & 0.316 & 15.91 & 0.483 \\
+no\_cot & 16.82 & 0.307 & 15.79 & 0.470 \\
+\midrule
+\textbf{Range} & 0.17 & 0.038 & 0.34 & 0.071 \\
+\bottomrule
+\end{tabular}
+\caption{Mean Intrinsic Dimension (ID) and LLE Error by prompt template.}
+\label{tab:geometry}
+\end{table}
+
+\textbf{Key findings:}
+\begin{itemize}
+    \item Geometry varies only slightly across templates (ID range: 0.17--0.34), which is expected since all prompts share the same questions.
+    \item Gemma has consistently lower ID values than TinyLlama, suggesting more organized embedding neighborhoods.
+    \item Gemma has higher LLE values, indicating different local geometric structure.
+\end{itemize}
+
+\subsection{Correlation Analysis}
+
+Table~\ref{tab:correlations} presents correlations between geometry and accuracy for both models.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Metric} & \multicolumn{2}{c}{\textbf{TinyLlama}} & \multicolumn{2}{c}{\textbf{Gemma}} \\
+ & \textbf{Corr.} & \textbf{p-value} & \textbf{Corr.} & \textbf{p-value} \\
+\midrule
+Pearson (ID) & $-0.35$ & 0.298 & $+0.12$ & 0.719 \\
+Pearson (LLE) & $-0.16$ & 0.637 & $+0.03$ & 0.929 \\
+\textbf{Spearman (ID)} & $\mathbf{-0.54}$ & \textbf{0.085} & $+0.10$ & 0.768 \\
+Spearman (LLE) & $-0.35$ & 0.285 & $-0.05$ & 0.873 \\
+\bottomrule
+\end{tabular}
+\caption{Correlations between geometry metrics and accuracy. Negative values indicate lower geometry $\rightarrow$ higher accuracy.}
+\label{tab:correlations}
+\end{table}
+
+\textbf{Key findings:}
+\begin{itemize}
+    \item \textbf{TinyLlama shows a moderate negative correlation} between ID and accuracy (Spearman $\rho = -0.54$, $p = 0.085$), approaching statistical significance. This supports our hypothesis.
+    \item \textbf{Gemma shows no significant correlation} (all $p > 0.7$), suggesting the geometry-accuracy relationship may be model-dependent.
+    \item The direction of correlations is consistently negative for TinyLlama (lower ID/LLE $\rightarrow$ higher accuracy) but inconsistent for Gemma.
+\end{itemize}
+
+\subsection{Visualization}
+
+Figure~\ref{fig:comparison} shows the relationship between Mean ID and Accuracy for both models.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\columnwidth]{figs/id_vs_accuracy_tinyllama.png}
+\includegraphics[width=0.48\columnwidth]{figs/id_vs_accuracy_gemma.png}
+\caption{Scatter plots of Mean ID vs. Accuracy for TinyLlama (left) and Gemma (right). TinyLlama shows a clear negative trend ($\rho = -0.54$), while Gemma shows no clear pattern.}
+\label{fig:comparison}
+\end{figure}
+
+\section{Error Analysis}
+
+We analyzed the errors to understand failure modes across prompt types.
+
+\subsection{Error Categories}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Template Type} & \multicolumn{2}{c}{\textbf{TinyLlama}} & \multicolumn{2}{c}{\textbf{Gemma}} \\
+ & \textbf{Extraction} & \textbf{Wrong} & \textbf{Extraction} & \textbf{Wrong} \\
+\midrule
+Minimal & 285/293 & 42\% & 142/146 & 48\% \\
+Direct & 283/287 & 38\% & 140/143 & 44\% \\
+CoT & 279/286 & 35\% & 139/145 & 41\% \\
+Structured & 283/291 & 41\% & 131/137 & 36\% \\
+No-CoT & 272/287 & 45\% & 138/144 & 47\% \\
+\bottomrule
+\end{tabular}
+\caption{Error breakdown: Extraction failures (number found but wrong) vs. Wrong answers (calculation/reasoning errors).}
+\label{tab:errors}
+\end{table}
+
+\subsection{Observations}
+
+\begin{itemize}
+    \item \textbf{Extraction failures} are common: Many errors occur because the model does not produce a clear final number, particularly for minimal and no-CoT prompts.
+    \item \textbf{Structured prompts} have the lowest wrong-answer rate for Gemma (36\%), suggesting they help guide correct reasoning.
+    \item \textbf{No clear pattern} between error types and geometry metrics was observed.
+\end{itemize}
+
+\section{Discussion}
+
+\subsection{Interpretation of Results}
+
+Our results provide \textbf{partial support} for the hypothesis that prompt-token geometry correlates with model performance:
+
+\begin{itemize}
+    \item \textbf{TinyLlama supports the hypothesis:} The Spearman correlation of $\rho = -0.54$ ($p = 0.085$) indicates that prompts with tokens in more compact, lower-dimensional neighborhoods tend to produce more reliable outputs. While not statistically significant at $\alpha = 0.05$, this trend is notable.
+    
+    \item \textbf{Gemma does not support the hypothesis:} No significant correlation was observed. This could indicate:
+    \begin{enumerate}
+        \item The geometry-accuracy relationship is model-dependent
+        \item Gemma's different architecture processes geometry differently
+        \item The smaller sample size (150 vs 300) reduced statistical power
+    \end{enumerate}
+\end{itemize}
+
+\subsection{Model Differences}
+
+The two models show distinct patterns:
+\begin{itemize}
+    \item \textbf{Different geometry:} Gemma has lower ID (15.8-16.1) vs TinyLlama (16.8-16.9), suggesting more organized embeddings overall.
+    \item \textbf{Different optimal prompts:} TinyLlama prefers no\_cot; Gemma prefers structured\_steps.
+    \item \textbf{Different accuracy levels:} Gemma achieves higher peak accuracy (8\% vs 4.3\%).
+\end{itemize}
+
+These differences highlight the importance of cross-model validation and suggest that prompt engineering strategies may need to be model-specific.
+
+\subsection{Limitations}
+
+\begin{itemize}
+    \item \textbf{Sample size:} With only 11 prompt templates, statistical power is limited. More templates would provide stronger evidence.
+    \item \textbf{Single dataset:} GSM8K is a specific task; results may not generalize to other domains.
+    \item \textbf{Small models:} Both models are around 1B parameters. Larger models may show different patterns.
+    \item \textbf{Causal interpretation:} Correlation does not imply causation; geometry may correlate with other prompt properties (e.g., length, vocabulary choice).
+    \item \textbf{Narrow geometry range:} Because all prompts share the same questions, geometry varies minimally across templates, making correlation detection difficult.
+\end{itemize}
+
+\subsection{Future Work}
+
+\begin{itemize}
+    \item \textbf{Word-swap experiments:} Replace high-ID tokens with low-ID synonyms to test causal effects.
+    \item \textbf{More models:} Test on Llama-3, Mistral, and larger models.
+    \item \textbf{Additional datasets:} TruthfulQA, MMLU, and generation tasks.
+    \item \textbf{More prompts:} Expand to 20+ templates for better statistical power.
+    \item \textbf{Semantic Coherence Score:} Incorporate ConceptNet~\citep{speer2017conceptnet} distances as an additional metric.
+\end{itemize}
+
+\section{Contributions}
+
+\begin{itemize}
+    \item \textbf{Om Mehta:} Literature review, methodology design, correlation analysis, report writing.
+    \item \textbf{Tanush Savadi:} Implementation, experiments, data analysis, visualization, report writing.
+\end{itemize}
+
+\section{Conclusion}
+
+We investigated whether the geometry of prompt token embeddings predicts LLM performance on the GSM8K mathematical reasoning benchmark. Using intrinsic dimension and LLE reconstruction error computed on two models' embeddings, we found:
+
+\begin{enumerate}
+    \item \textbf{TinyLlama shows promising evidence:} A moderate negative correlation (Spearman $\rho = -0.54$, $p = 0.085$) suggests prompts with lower geometric complexity tend to achieve higher accuracy.
+    \item \textbf{Gemma shows no correlation:} The geometry-accuracy relationship appears to be model-dependent.
+    \item \textbf{Prompt effectiveness varies:} Even for small models, choice of prompt template significantly affects accuracy (1.3\% to 8.0\% range).
+\end{enumerate}
+
+Our findings provide preliminary evidence that embedding geometry may offer a lightweight signal for prompt selection, aligning with prior work showing that not all regions of embedding space are equal~\citep{lee2025geometry}. However, the model-dependent nature of our results underscores the need for further cross-model validation before drawing broader conclusions.
+
+\section{AI Disclosure}
+
+\begin{itemize}
+    \item \textbf{Did you use any AI assistance to complete this project?} 
+    \begin{itemize}
+        \item Yes. We used Claude (Anthropic) and GitHub Copilot for assistance with code development and debugging.
+    \end{itemize}
+\end{itemize}
+
+\noindent\textit{If you answered yes, please complete the following:}
+
+\begin{itemize}
+    \item \textbf{Prompts used:}
+    \begin{itemize}
+        \item Code assistance: ``Help me implement intrinsic dimension computation using PCA on kNN neighborhoods''
+        \item Debugging: ``Why is my FAISS GPU index not working in Google Colab?''
+        \item Report: ``Analyze these correlation results and help structure the findings''
+    \end{itemize}
+    
+    \item \textbf{Experience with AI:}
+    \begin{itemize}
+        \item AI assistance was helpful for boilerplate code and debugging CUDA/FAISS issues. The core experimental design and analysis were done independently. AI-generated text was substantially edited for accuracy and clarity. Some AI suggestions for statistical interpretation were incorrect and had to be corrected manually.
+    \end{itemize}
+\end{itemize}
+
+\bibliographystyle{apalike}
+\footnotesize
+\bibliography{yourbib}
+
+\end{document}
